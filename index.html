@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GovAI Fellows Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      color: #1e293b;
+    }
+
+    /* ---- Password screen ---- */
+    #login-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: #f8fafc;
+    }
+    .login-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    .login-card h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .login-card p { font-size: 0.875rem; color: #64748b; margin-bottom: 1.5rem; }
+    .login-card input {
+      width: 100%;
+      padding: 0.65rem 1rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 1rem;
+      outline: none;
+      margin-bottom: 0.75rem;
+    }
+    .login-card input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+    .login-error { color: #dc2626; font-size: 0.85rem; margin-bottom: 0.75rem; display: none; }
+
+    /* ---- Buttons ---- */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.65rem 1.25rem;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-primary { background: #2563eb; color: #fff; width: 100%; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-primary:disabled { opacity: 0.5; cursor: default; }
+
+    /* ---- App screen ---- */
+    #app-screen { display: none; height: 100vh; position: relative; }
+    #map { height: 100%; width: 100%; }
+
+    /* Header */
+    .header {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .header h1 { font-size: 1.1rem; font-weight: 700; }
+    .header-right { display: flex; align-items: center; gap: 0.5rem; }
+    .fellow-count { font-size: 0.85rem; color: #64748b; }
+    .btn-outline {
+      padding: 0.4rem 0.75rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: transparent;
+      font-size: 0.85rem;
+      color: #475569;
+      cursor: pointer;
+    }
+    .btn-outline:hover { background: #f1f5f9; }
+
+    /* Floating add button */
+    .fab {
+      position: absolute;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 1000;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 50px;
+      padding: 0.85rem 1.5rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(37,99,235,0.35);
+      transition: background 0.15s, transform 0.1s;
+    }
+    .fab:hover { background: #1d4ed8; }
+    .fab:active { transform: scale(0.96); }
+
+    /* ---- Modal ---- */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(4px);
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop.active { display: flex; }
+    .modal {
+      background: #fff;
+      border-radius: 16px;
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 420px;
+      margin: 1rem;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    .modal-header h2 { font-size: 1.15rem; font-weight: 700; }
+    .modal-close {
+      background: none; border: none; font-size: 1.5rem;
+      color: #94a3b8; cursor: pointer; line-height: 1;
+    }
+    .modal-close:hover { color: #475569; }
+
+    .form-group { margin-bottom: 0.75rem; }
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 0.3rem;
+      color: #334155;
+    }
+    .form-group label span { font-weight: 400; color: #94a3b8; }
+    .form-group input {
+      width: 100%;
+      padding: 0.6rem 0.85rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      outline: none;
+    }
+    .form-group input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+    .form-error { color: #dc2626; font-size: 0.85rem; margin-bottom: 0.75rem; display: none; }
+
+    /* ---- Popup ---- */
+    .fellow-popup { line-height: 1.5; }
+    .fellow-popup .name { font-size: 1rem; font-weight: 600; }
+    .fellow-popup .city { color: #64748b; font-size: 0.9rem; }
+    .fellow-popup .dates { color: #94a3b8; font-size: 0.85rem; }
+    .fellow-popup .actions { margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+    .btn-wa {
+      display: inline-block;
+      background: #25d366;
+      color: #fff;
+      padding: 0.3rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .btn-wa:hover { background: #20bd5a; }
+    .btn-remove {
+      background: none; border: none;
+      color: #ef4444; font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .btn-remove:hover { text-decoration: underline; }
+
+    /* Leaflet popup overrides */
+    .leaflet-popup-content-wrapper { border-radius: 12px !important; }
+    .leaflet-popup-content { margin: 12px 14px !important; }
+  </style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>GovAI Fellows Map</h1>
+    <p>Enter the shared password to continue</p>
+    <form id="login-form">
+      <input type="password" id="password-input" placeholder="Password" required autofocus />
+      <div class="login-error" id="login-error">Incorrect password</div>
+      <button type="submit" class="btn btn-primary">Enter</button>
+    </form>
+  </div>
+</div>
+
+<!-- App Screen -->
+<div id="app-screen">
+  <div class="header">
+    <h1>GovAI Fellows Map</h1>
+    <div class="header-right">
+      <span class="fellow-count" id="fellow-count"></span>
+      <button class="btn-outline" id="sign-out-btn">Sign out</button>
+    </div>
+  </div>
+  <div id="map"></div>
+  <button class="fab" id="add-btn">+ Add Yourself</button>
+</div>
+
+<!-- Add Fellow Modal -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Add Yourself</h2>
+      <button class="modal-close" id="modal-close">&times;</button>
+    </div>
+    <form id="add-form">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" name="name" placeholder="Your name" required />
+      </div>
+      <div class="form-group">
+        <label>City</label>
+        <input type="text" name="city" placeholder="e.g. London, UK" required />
+      </div>
+      <div class="form-group">
+        <label>WhatsApp Number</label>
+        <input type="tel" name="whatsapp" placeholder="+44 7700 900000" required />
+      </div>
+      <div class="form-group">
+        <label>Dates <span>(optional)</span></label>
+        <input type="text" name="dates" placeholder="e.g. Apr – Jun 2026" />
+      </div>
+      <div class="form-error" id="form-error"></div>
+      <button type="submit" class="btn btn-primary" id="add-submit">Add to Map</button>
+    </form>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+(function () {
+  // --- Init Supabase ---
+  const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+
+  // --- DOM refs ---
+  const loginScreen = document.getElementById("login-screen");
+  const appScreen = document.getElementById("app-screen");
+  const loginForm = document.getElementById("login-form");
+  const loginError = document.getElementById("login-error");
+  const passwordInput = document.getElementById("password-input");
+  const signOutBtn = document.getElementById("sign-out-btn");
+  const addBtn = document.getElementById("add-btn");
+  const modalBackdrop = document.getElementById("modal-backdrop");
+  const modalClose = document.getElementById("modal-close");
+  const addForm = document.getElementById("add-form");
+  const formError = document.getElementById("form-error");
+  const addSubmit = document.getElementById("add-submit");
+  const fellowCount = document.getElementById("fellow-count");
+
+  let map;
+  let markers = [];
+
+  // --- Auth ---
+  function isLoggedIn() {
+    return sessionStorage.getItem("govai-auth") === "yes";
+  }
+
+  function showApp() {
+    loginScreen.style.display = "none";
+    appScreen.style.display = "block";
+    initMap();
+    loadFellows();
+  }
+
+  if (isLoggedIn()) {
+    showApp();
+  }
+
+  loginForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (passwordInput.value === CONFIG.SITE_PASSWORD) {
+      sessionStorage.setItem("govai-auth", "yes");
+      showApp();
+    } else {
+      loginError.style.display = "block";
+      passwordInput.value = "";
+      passwordInput.focus();
+    }
+  });
+
+  signOutBtn.addEventListener("click", function () {
+    sessionStorage.removeItem("govai-auth");
+    location.reload();
+  });
+
+  // --- Map ---
+  function initMap() {
+    if (map) return;
+    map = L.map("map").setView([20, 0], 2);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 18,
+    }).addTo(map);
+    // Fix tile rendering after display:none → block
+    setTimeout(function () { map.invalidateSize(); }, 100);
+  }
+
+  // --- Load Fellows ---
+  async function loadFellows() {
+    const { data, error } = await sb
+      .from("fellows")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) { console.error(error); return; }
+
+    // Clear existing markers
+    markers.forEach(function (m) { map.removeLayer(m); });
+    markers = [];
+
+    const count = data.length;
+    fellowCount.textContent = count + (count === 1 ? " fellow" : " fellows");
+
+    data.forEach(function (f) {
+      const waLink = "https://wa.me/" + f.whatsapp.replace(/\D/g, "");
+      const datesHtml = f.dates
+        ? '<div class="dates"><b>When:</b> ' + escapeHtml(f.dates) + "</div>"
+        : "";
+
+      const popup = '<div class="fellow-popup">'
+        + '<div class="name">' + escapeHtml(f.name) + "</div>"
+        + '<div class="city">' + escapeHtml(f.city) + "</div>"
+        + datesHtml
+        + '<div class="actions">'
+        + '<a class="btn-wa" href="' + waLink + '" target="_blank" rel="noopener">WhatsApp</a>'
+        + '<button class="btn-remove" data-id="' + f.id + '">Remove</button>'
+        + "</div></div>";
+
+      const marker = L.marker([f.latitude, f.longitude]).addTo(map).bindPopup(popup);
+      markers.push(marker);
+    });
+
+    // Fit bounds if there are markers
+    if (markers.length) {
+      const group = L.featureGroup(markers);
+      map.fitBounds(group.getBounds().pad(0.3));
+    }
+  }
+
+  // --- Remove fellow (delegated click) ---
+  document.addEventListener("click", async function (e) {
+    if (!e.target.classList.contains("btn-remove")) return;
+    const id = e.target.dataset.id;
+    if (!confirm("Remove this person from the map?")) return;
+    e.target.textContent = "Removing...";
+    await sb.from("fellows").delete().eq("id", id);
+    loadFellows();
+  });
+
+  // --- Modal ---
+  addBtn.addEventListener("click", function () {
+    modalBackdrop.classList.add("active");
+  });
+  modalClose.addEventListener("click", closeModal);
+  modalBackdrop.addEventListener("click", function (e) {
+    if (e.target === modalBackdrop) closeModal();
+  });
+
+  function closeModal() {
+    modalBackdrop.classList.remove("active");
+    addForm.reset();
+    formError.style.display = "none";
+  }
+
+  // --- Add Fellow ---
+  addForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    formError.style.display = "none";
+    addSubmit.disabled = true;
+    addSubmit.textContent = "Adding...";
+
+    const fd = new FormData(addForm);
+    const name = fd.get("name").trim();
+    const city = fd.get("city").trim();
+    const whatsapp = fd.get("whatsapp").trim();
+    const dates = fd.get("dates").trim() || null;
+
+    try {
+      // Geocode
+      const geoRes = await fetch(
+        "https://nominatim.openstreetmap.org/search?q=" +
+          encodeURIComponent(city) +
+          "&format=json&limit=1",
+        { headers: { "User-Agent": "GovAI-Fellows-Map/1.0" } }
+      );
+      const geoData = await geoRes.json();
+
+      if (!geoData.length) {
+        showFormError('Could not find "' + city + '". Try a more specific city name.');
+        return;
+      }
+
+      const displayCity = geoData[0].display_name.split(",").slice(0, 2).join(",").trim();
+
+      const { error } = await sb.from("fellows").insert({
+        name: name,
+        city: displayCity,
+        latitude: parseFloat(geoData[0].lat),
+        longitude: parseFloat(geoData[0].lon),
+        whatsapp: whatsapp,
+        dates: dates,
+      });
+
+      if (error) {
+        showFormError("Failed to save. Please try again.");
+        return;
+      }
+
+      closeModal();
+      loadFellows();
+    } catch (err) {
+      showFormError("Something went wrong. Check your connection.");
+    } finally {
+      addSubmit.disabled = false;
+      addSubmit.textContent = "Add to Map";
+    }
+  });
+
+  function showFormError(msg) {
+    formError.textContent = msg;
+    formError.style.display = "block";
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+})();
+</script>
+</body>
+</html>
